@@ -1,0 +1,116 @@
+Мета роботи
+
+Набути практичних навичок розробки реляційної бази даних: від аналізу предметної області до створення працюючого застосунку з базою даних у PostgreSQL та підключенням до програми.
+
+Предметна область
+
+Бібліотека — система для збереження інформації про книги, авторів, читачів, видавництва та видачу книг.
+
+Сутності (5)
+
+Author — автор
+
+Publisher — видавництво
+
+Book — книга
+
+Reader — читач
+
+Loan — видача книги
+
+Таблиці (3НФ)
+
+Author: author_id, first_name, last_name
+
+Publisher: publisher_id, name
+
+Book: book_id, title, year, author_id, publisher_id
+
+Reader: reader_id, full_name, email
+
+Loan: loan_id, book_id, reader_id, loan_date, return_date
+
+Всі таблиці нормалізовані до 3 нормальної форми.
+
+Створення таблиць (PostgreSQL)
+CREATE TABLE author (
+  author_id SERIAL PRIMARY KEY,
+  first_name TEXT,
+  last_name TEXT
+);
+
+CREATE TABLE publisher (
+  publisher_id SERIAL PRIMARY KEY,
+  name TEXT
+);
+
+CREATE TABLE book (
+  book_id SERIAL PRIMARY KEY,
+  title TEXT,
+  year INT,
+  author_id INT REFERENCES author(author_id),
+  publisher_id INT REFERENCES publisher(publisher_id)
+);
+
+CREATE TABLE reader (
+  reader_id SERIAL PRIMARY KEY,
+  full_name TEXT,
+  email TEXT UNIQUE
+);
+
+CREATE TABLE loan (
+  loan_id SERIAL PRIMARY KEY,
+  book_id INT REFERENCES book(book_id),
+  reader_id INT REFERENCES reader(reader_id),
+  loan_date DATE,
+  return_date DATE
+);
+
+SQL-запити (5)
+-- 1. Книги та автори
+SELECT title, last_name FROM book b JOIN author a ON b.author_id=a.author_id;
+
+-- 2. Видані книги
+SELECT title FROM loan l JOIN book b ON l.book_id=b.book_id
+WHERE return_date IS NULL;
+
+-- 3. Кількість книг автора
+SELECT last_name, COUNT(*) FROM book b
+JOIN author a ON b.author_id=a.author_id
+GROUP BY last_name;
+
+-- 4. Читачі з більше ніж 1 книгою
+SELECT full_name FROM loan l
+JOIN reader r ON l.reader_id=r.reader_id
+GROUP BY full_name HAVING COUNT(*) > 1;
+
+-- 5. Найстаріша книга
+SELECT title FROM book ORDER BY year LIMIT 1;
+
+Python (консольний CRUD)
+import psycopg2
+
+conn = psycopg2.connect(
+    dbname="library",
+    user="postgres",
+    password="password"
+)
+cur = conn.cursor()
+
+# CREATE
+cur.execute("INSERT INTO reader (full_name, email) VALUES (%s,%s)",
+            ("Іван Петренко", "ivan@mail.com"))
+conn.commit()
+
+# READ
+cur.execute("SELECT * FROM reader")
+print(cur.fetchall())
+
+# UPDATE
+cur.execute("UPDATE reader SET email=%s WHERE reader_id=%s",
+            ("new@mail.com", 1))
+conn.commit()
+
+# DELETE
+cur.execute("DELETE FROM reader WHERE reader_id=%s", (1,))
+conn.commit()
