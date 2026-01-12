@@ -1,1 +1,96 @@
-1
+Код для лабораторної роботи 5
+
+
+EXPLAIN ANALYZE
+SELECT *
+FROM orders
+WHERE customer_id = 1;
+
+EXPLAIN ANALYZE
+SELECT *
+FROM orders
+WHERE order_date >= CURRENT_DATE - INTERVAL '30 days';
+
+EXPLAIN ANALYZE
+SELECT
+    o.order_id,
+    c.contact_name,
+    p.product_name,
+    oi.quantity,
+    oi.unit_price
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN order_items oi ON o.order_id = oi.order_id
+JOIN products p ON oi.product_id = p.product_id;
+
+CREATE INDEX IF NOT EXISTS idx_orders_customer_id
+ON orders(customer_id);
+
+CREATE INDEX IF NOT EXISTS idx_orders_order_date
+ON orders(order_date);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_product_id
+ON order_items(product_id);
+
+CREATE OR REPLACE VIEW customer_orders_view AS
+SELECT
+    o.order_id,
+    c.contact_name,
+    o.order_date,
+    o.order_status,
+    SUM(oi.unit_price * oi.quantity * (1 - oi.discount)) AS total_amount
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN order_items oi ON o.order_id = oi.order_id
+GROUP BY o.order_id, c.contact_name, o.order_date, o.order_status;
+
+CREATE OR REPLACE VIEW product_sales_view AS
+SELECT
+    p.product_name,
+    SUM(oi.quantity) AS total_sold,
+    SUM(oi.unit_price * oi.quantity * (1 - oi.discount)) AS revenue
+FROM products p
+JOIN order_items oi ON p.product_id = oi.product_id
+JOIN orders o ON oi.order_id = o.order_id
+WHERE o.order_status = 'delivered'
+GROUP BY p.product_name;
+
+CREATE TABLE IF NOT EXISTS orders_log (
+    log_id SERIAL PRIMARY KEY,
+    order_id INT,
+    action TEXT,
+    log_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE OR REPLACE FUNCTION log_orders_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO orders_log(order_id, action)
+    VALUES (NEW.order_id, TG_OP);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_orders_log ON orders;
+
+CREATE TRIGGER trg_orders_log
+AFTER INSERT OR UPDATE ON orders
+FOR EACH ROW
+EXECUTE FUNCTION log_orders_changes();
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_roles WHERE rolname = 'technomart_viewer'
+    ) THEN
+        CREATE USER technomart_viewer WITH PASSWORD 'viewer123';
+    END IF;
+END
+$$;
+
+GRANT SELECT ON products TO technomart_viewer;
+GRANT SELECT ON categories TO technomart_viewer;
+GRANT SELECT ON customer_orders_view TO technomart_viewer;
+
+REVOKE INSERT, UPDATE, DELETE ON orders FROM technomart_viewer;
+REVOKE INSERT, UPDATE, DELETE ON order_items FROM technomart_viewer;
