@@ -1,116 +1,99 @@
-Мета роботи
+код
 
-Набути практичних навичок розробки реляційної бази даних: від аналізу предметної області до створення працюючого застосунку з базою даних у PostgreSQL та підключенням до програми.
 
-Предметна область
-
-Бібліотека — система для збереження інформації про книги, авторів, читачів, видавництва та видачу книг.
-
-Сутності (5)
-
-Author — автор
-
-Publisher — видавництво
-
-Book — книга
-
-Reader — читач
-
-Loan — видача книги
-
-Таблиці (3НФ)
-
-Author: author_id, first_name, last_name
-
-Publisher: publisher_id, name
-
-Book: book_id, title, year, author_id, publisher_id
-
-Reader: reader_id, full_name, email
-
-Loan: loan_id, book_id, reader_id, loan_date, return_date
-
-Всі таблиці нормалізовані до 3 нормальної форми.
-
-Створення таблиць (PostgreSQL)
-CREATE TABLE author (
-  author_id SERIAL PRIMARY KEY,
-  first_name TEXT,
-  last_name TEXT
-);
-
-CREATE TABLE publisher (
-  publisher_id SERIAL PRIMARY KEY,
-  name TEXT
-);
-
-CREATE TABLE book (
-  book_id SERIAL PRIMARY KEY,
-  title TEXT,
-  year INT,
-  author_id INT REFERENCES author(author_id),
-  publisher_id INT REFERENCES publisher(publisher_id)
-);
-
-CREATE TABLE reader (
-  reader_id SERIAL PRIMARY KEY,
-  full_name TEXT,
-  email TEXT UNIQUE
-);
-
-CREATE TABLE loan (
-  loan_id SERIAL PRIMARY KEY,
-  book_id INT REFERENCES book(book_id),
-  reader_id INT REFERENCES reader(reader_id),
-  loan_date DATE,
-  return_date DATE
-);
-
-SQL-запити (5)
--- 1. Книги та автори
-SELECT title, last_name FROM book b JOIN author a ON b.author_id=a.author_id;
-
--- 2. Видані книги
-SELECT title FROM loan l JOIN book b ON l.book_id=b.book_id
-WHERE return_date IS NULL;
-
--- 3. Кількість книг автора
-SELECT last_name, COUNT(*) FROM book b
-JOIN author a ON b.author_id=a.author_id
-GROUP BY last_name;
-
--- 4. Читачі з більше ніж 1 книгою
-SELECT full_name FROM loan l
-JOIN reader r ON l.reader_id=r.reader_id
-GROUP BY full_name HAVING COUNT(*) > 1;
-
--- 5. Найстаріша книга
-SELECT title FROM book ORDER BY year LIMIT 1;
-
-Python (консольний CRUD)
 import psycopg2
+from dotenv import load_dotenv
+import os
 
-conn = psycopg2.connect(
-    dbname="library",
-    user="postgres",
-    password="password"
-)
-cur = conn.cursor()
+# Load environment variables
+load_dotenv()
 
-# CREATE
-cur.execute("INSERT INTO reader (full_name, email) VALUES (%s,%s)",
-            ("Іван Петренко", "ivan@mail.com"))
-conn.commit()
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
-# READ
-cur.execute("SELECT * FROM reader")
-print(cur.fetchall())
+try:
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        sslmode="require"
+    )
 
-# UPDATE
-cur.execute("UPDATE reader SET email=%s WHERE reader_id=%s",
-            ("new@mail.com", 1))
-conn.commit()
+    print("✅ Підключення успішне")
 
-# DELETE
-cur.execute("DELETE FROM reader WHERE reader_id=%s", (1,))
-conn.commit()
+    cur = conn.cursor()
+
+    while True:
+        print("\n📚 БІБЛІОТЕКА")
+        print("1 – Показати всі книги")
+        print("2 – Додати книгу")
+        print("3 – Оновити кількість примірників")
+        print("4 – Видалити книгу")
+        print("0 – Вийти")
+
+        choice = input("➡ Вибір: ")
+
+        if choice == "1":
+            cur.execute("""
+                SELECT b.book_id, b.title, a.full_name, b.copies
+                FROM books b
+                JOIN authors a ON b.author_id = a.author_id
+                ORDER BY b.book_id
+            """)
+            for row in cur.fetchall():
+                print(row)
+
+        elif choice == "2":
+            title = input("Назва книги: ")
+            author_id = input("ID автора: ")
+            category_id = input("ID категорії: ")
+            year = input("Рік: ")
+            copies = input("Кількість примірників: ")
+
+            cur.execute("""
+                INSERT INTO books (title, author_id, category_id, year, copies)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (title, author_id, category_id, year, copies))
+            conn.commit()
+            print("✅ Книгу додано")
+
+        elif choice == "3":
+            book_id = input("ID книги: ")
+            copies = input("Нова кількість примірників: ")
+
+            cur.execute("""
+                UPDATE books
+                SET copies = %s
+                WHERE book_id = %s
+            """, (copies, book_id))
+            conn.commit()
+            print(" Дані оновлено")
+
+        elif choice == "4":
+            book_id = input("ID книги: ")
+
+            cur.execute("DELETE FROM books WHERE book_id = %s", (book_id,))
+            conn.commit()
+            print("🗑️ Книгу видалено")
+
+        elif choice == "0":
+            break
+
+        else:
+            print("❌ Невірний вибір")
+
+    cur.close()
+    conn.close()
+    print("🔒 З'єднання закрито")
+
+except Exception as e:
+    print("❌ Помилка:", e)
+1
+
+
+питання
